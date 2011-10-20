@@ -1,0 +1,12 @@
+smsc1
+6200
+cristal
+aircon
+cristal
+aircon
+http://localhost:8787/mm7
+9998
+33333
+11111
+2299
+55555
