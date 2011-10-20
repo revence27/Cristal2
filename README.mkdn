@@ -1,0 +1,11 @@
+Cristal 2: An SMPP Gateway
+==========================
+Cristal sits between arbitrary applications and an SMPP gateway. It exposes an interface via TCP to which applications can connect and, using JSON, send commands to it, to execute things like sending messages (and, of course, getting messages sent to them).
+
+The applications are identified by keyword; the first word in an SMS message is considered to be the keyword.
+
+Because it doesn't create and destroy sockets for every request, it is highly scalable. And because the applications also connect once and receive the messages meant for them when the messages arrive, it also eliminates the lag and resource drain that may be encountered if, say, HTTP was used to reach the applications.
+
+It can be re-configured without restating it, by passing a new configuration (in JSON) to its configuration port.
+
+All communication is carried out in JSON.
