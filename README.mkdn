@@ -9,3 +9,5 @@ Because it doesn't create and destroy sockets for every request, it is highly sc
 It can be re-configured without restating it, by passing a new configuration (in JSON) to its configuration port.
 
 All communication is carried out in JSON.
+
+There are APIs for writing applications for Cristal2 included; for Ruby and Haskell.
