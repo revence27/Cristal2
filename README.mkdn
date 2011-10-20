@@ -11,3 +11,7 @@ It can be re-configured without restating it, by passing a new configuration (in
 All communication is carried out in JSON.
 
 There are APIs for writing applications for Cristal2 included; for Ruby and Haskell.
+
+Issues
+------
+1.  It was written before `Data.ByteString` became common and workable in Haskell. So an upgrade would have to start with moving all instances of `String` to `Data.ByteString`. The work required would be something on the order of resulting in Cristal3.
