@@ -1,11 +1,11 @@
 module Client where
 
 import Control.Concurrent
+import Control.Exception as Except
 import Data.Bits
 import Data.Char
 import qualified Data.List as DL
 import qualified Data.Map as DM
-import MMSClient
 import Network
 import Network.HTTP
 import Network.URI
@@ -13,7 +13,8 @@ import PDUs
 import System.IO
 import System.Time
 
-data Enum a => Auth a = Auth {username, password, stype :: String,
+--	data Enum a => Auth a = Auth {username, password, stype :: String,
+data Auth a = Enum a => Auth {username, password, stype :: String,
                               numtype, numplan :: a, addrange,
                               mmsUsername, mmsPassword :: String,
                               mmsURL :: URI}
@@ -65,7 +66,7 @@ authenticate hdl (Auth usn pwd stp nt np adr husn hpwd hurl) die user = do
         case br of
             Nothing -> fail "Authentication failed."
             Just x  -> return x
-    x  <- attempt `catch` (\_ -> fail "TRX authentication failed.")
+    x  <- attempt `Except.catch` ((\_ -> fail "TRX authentication failed.") :: IOError -> IO String)
     dv <- forkIO $ do
         post chn outb husn hpwd hurl
         killThread =<< myThreadId
@@ -73,17 +74,17 @@ authenticate hdl (Auth usn pwd stp nt np adr husn hpwd hurl) die user = do
         user die inb outb
         killThread =<< myThreadId
     pm <- forkIO ((postMan hdl die chn inb (DM.empty :: TransPcs))
-        `catch` (\_ -> writeSampleVar die ()))
-    mc <- forkIO $ receiveMMS 8765 inb
+        `Except.catch` ((\_ -> writeSampleVar die ()) :: IOError -> IO ()))
+    --  mc <- forkIO $ receiveMMS 8765 inb
     let fin = do
-        killThread mc
+        --  killThread mc
         killThread pm
         killThread io
         killThread sc
         killThread dv
         unbindTRX chn
         unbindTRXResp hdl
-    (readSampleVar die >> fin) `catch` (\_ -> return ())
+    (readSampleVar die >> fin) `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
 
 postMan :: Handle -> SampleVar () -> Chan Payload -> Inbox -> TransPcs -> IO ()
 postMan hdl die chn i@(Inbox chi) ps = do
@@ -97,7 +98,7 @@ postMan hdl die chn i@(Inbox chi) ps = do
                 sendPDU chn
                     (WithSeq ("\x80\x00\x00\x05\x00\x00\x00\x00" ++ sq))
                 intoInbox ps (drop 12 x) i
-                else return ps))) `catch` (\_ -> fail "Can't read PDU in!")
+                else return ps))) `Except.catch` ((\_ -> fail "Can't read PDU in!") :: Monad m => IOError -> IO (m TransPcs))
     postMan hdl die chn i =<< got
 
 scribe :: MonGen mg => Handle -> mg -> Chan Payload -> IO ()
@@ -161,10 +162,12 @@ post chn o@(Outbox c) husn hpwd hurl = do
             let tlv' = DM.insert 0x1383 str' tl'v
             sendAll chn (OutMsg fr [t] ms wh tlv') h1 h2 h3
         sendAll _ (OutMMS fr t ms lk wh) husn hpwd hurl = do
+            {--
             got <- sendMMS (fr, t, ms, lk, wh) (husn, hpwd) hurl
             case got of
                 Left (MMSError h d) -> putStrLn (h ++ ": " ++ d)
-                Right str           -> putStrLn str
+                Right str           -> putStrLn str --}
+            return ()
 
         pieces :: String -> [String]
         pieces str =

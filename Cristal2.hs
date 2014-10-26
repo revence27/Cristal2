@@ -3,6 +3,7 @@ module Main where
 import Client
 import Conf
 import Control.Concurrent
+import Control.Exception as Except
 import Data.Char
 import qualified Data.List as DL
 import qualified Data.Map as DM
@@ -156,7 +157,7 @@ preprocessor pp1 pp2 sck = do
     (hdl, _, _) <- accept sck
     hSetBuffering hdl LineBuffering
     killThread t1
-    runPreproc pp1 pp2 hdl `catch` (\_ -> return ())
+    runPreproc pp1 pp2 hdl `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
     hClose hdl
     preprocessor pp1 pp2 sck
 
@@ -221,7 +222,7 @@ reentrance sck i@(Inbox inb) = do
     (hdl, _, _) <- accept sck
     hSetBuffering hdl LineBuffering
     forkIO $ do
-        perpetua hdl i `catch` (\_ -> return ())
+        perpetua hdl i `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
         hClose hdl
         killThread =<< myThreadId
     reentrance sck i
@@ -241,27 +242,11 @@ pullInMsg hdl = do
         Yes js -> case (     "/params/to" @@ js,
                             "/params/from" @@ js,
                          "/params/message" @@ js) of
-            (Just (JStr t), Just (JStr f), Just (JStr m)) -> do
-                case ("/params/linkid" @@ js,
-                       "/params/media" @@ js) of
-                    (Just (JStr l), Just (JArr md)) -> do
-                        case pullMedia md of
-                            Yes mds -> return (InMMS f t m l mds)
-                            No y    -> fail y
-                    _                               -> do
-                        return (InMsg f t m (fetchTLVs js))
-            _                        -> fail "to? from? message?"
+            (Just (JStr t), Just (JStr f), Just (JStr m)) ->
+            	return (InMsg f t m (fetchTLVs js))
+            _                        ->
+                fail "to? from? message?"
         No y   -> fail y)
-    where
-    pullMedia :: Monad m => [JSONValue] -> m [MMSFile]
-    pullMedia md = sequence [(case x of
-        JObj mp -> case ("/mimetype" @@ x, "/sha1" @@ x) of
-            (Just (JStr mime), Just (JStr sha1)) ->
-                return (MMSFile mime sha1)
-            _                                    ->
-                fail "Mo media files without a type and SHA1 signature."
-        _       ->
-            fail "Media files should be a JSON object each.") | x <- md]
 
 findKwdDest :: Conf -> String -> IO String
 findKwdDest cnf str = do
@@ -279,7 +264,7 @@ distributeThem :: Inbox -> Boxen -> Conf -> Handle -> Handle -> IO ()
 distributeThem inb bxn cnf outh inh = do
     receiveMsg inb $ \msp -> withMVar bxn $ \mp -> do
         sm  <- fmap (toSysMsg msp) (allKeywords mp cnf)
-        msg <- friskMessage msp outh inh `catch` (\_ -> return msp)
+        msg <- friskMessage msp outh inh `Except.catch` ((\_ -> return msp) :: IOError -> IO InMsg)
         kw  <- findKwdDest cnf $ destinataire msg
         case DM.lookup kw mp of
             Just (Inbox x) -> writeChan x msg
@@ -314,8 +299,8 @@ manageModules :: Socket -> Conf -> Boxen -> Outbox -> F5Sig -> PPChan -> SmallCo
 manageModules sck cnf bxn outb f5 pp1 c@(src, prt, num, frs) = do
     (mod, _, _) <- accept sck
     hSetBuffering mod LineBuffering
-    yes <- (authMod mod cnf) `catch`
-                (\_ -> return (fail "Authentication failed."))
+    yes <- (authMod mod cnf) `Except.catch`
+                ((\_ -> return (fail "Authentication failed.")) :: Monad m => IOError -> IO (m String))
     case yes of
         Yes k -> do
             inb <- fmap Inbox newChan
@@ -327,7 +312,7 @@ manageModules sck cnf bxn outb f5 pp1 c@(src, prt, num, frs) = do
                 writeSampleVar f5 ()
                 return (DM.insert k inb mp)
             forkIO $ do
-                (runMsgs mod k cnf inb outb pp1) `catch` (\_ -> return ())
+                (runMsgs mod k cnf inb outb pp1) `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
                 notActive cnf k
                 modifyMVar_ bxn (return . (DM.delete k))
                 putStrLn (k ++ " disconnected.")
@@ -348,7 +333,7 @@ runMsgs hdl nom cnf inb outb pp1 = do
     wrt <- forkIO $ modWriter ch inb
     rdr <- forkIO $ do
         (modReader hdl ch nom cnf outb die pp1)
-            `catch` (\_ -> return ())
+            `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
         writeSampleVar die ()
         killThread wrt
         killThread =<< myThreadId
@@ -392,7 +377,7 @@ modWriter ch inb = do
                 (show sv) ++ ", \"session\":" ++ (show ses) ++ ", \"seqence\":"
                 ++ (show sqn) ++ ", \"end\":" ++ (show (JBool ends)) ++
                 ", \"tlvs\":" ++ (tlvsToJS tv) ++ "}}"
-    re `catch` (\_ -> return ())
+    re `Except.catch` ((\_ -> return ()) :: IOError -> IO ())
     where
         showMedia :: [MMSFile] -> String
         showMedia them = show (map (\(MMSFile m s) -> "{\"mimetype\":" ++

@@ -2,6 +2,7 @@ module Conf (Settings (Settings), mods, Conf (), closeConf, openConf,
        withConf, moduleMap, activeMods, newActive, notActive, kwdAliases) where
 
 import Control.Concurrent
+import Control.Exception as Except
 import Data.Char
 import qualified Data.Map as DM
 import JSON
@@ -81,8 +82,8 @@ maintainConf sts sck = do
                         hPutStrLn hdl
                             ("{\"error\":\"modules should be object\"}")
                         return (Settings (mods x) (active x)
-                                (aliases x)))) `catch`
-                                        (\_ -> return ())
+                                (aliases x)))) `Except.catch`
+                                        ((\_ -> return ()) :: IOError -> IO ())
     hClose hdl
     maintainConf sts sck
 
