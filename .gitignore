@@ -1,3 +1,6 @@
 _darcs
 modules
 todo
+*.hi
+*.swp
+*.o
